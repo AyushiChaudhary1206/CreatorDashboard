@@ -56,7 +56,7 @@ const Feed = () => {
       }
 
       await axios.post(
-        'http://localhost:5000/api/user/save-post',
+        'https://creatordashboardbackend-7px3.onrender.com/api/user/save-post',
         {
           postId: post.id,
           content: post.title,
