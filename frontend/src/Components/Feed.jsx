@@ -112,7 +112,7 @@ const Feed = () => {
       }
 
       await axios.post(
-        'http://localhost:5000/api/user/report-post',
+        'https://creatordashboardbackend-7px3.onrender.com/api/user/report-post',
         { postId: selectedPostId, reason: reportReason },
         {
           headers: {
