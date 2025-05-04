@@ -3,18 +3,19 @@ import React, { useEffect, useState } from 'react';
 
 const Feed = () => {
   const [posts, setPosts] = useState([]);
-  const [message, setMessage] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [reportReason, setReportReason] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
-  // Fetch posts from Reddit
+  // Fetch Reddit posts and update their saved/reported status from backend
   useEffect(() => {
-    fetch('https://www.reddit.com/r/popular.json')
-      .then((res) => res.json())
-      .then((data) => {
-        const extracted = data.data.children.map((item) => ({
+    const fetchData = async () => {
+      try {
+        const redditResponse = await fetch('https://www.reddit.com/r/popular.json');
+        const redditData = await redditResponse.json();
+
+        const redditPosts = redditData.data.children.map((item) => ({
           id: item.data.id,
           title: item.data.title,
           url: item.data.url,
@@ -23,25 +24,36 @@ const Feed = () => {
           reported: false,
         }));
 
-        // Check localStorage for saved and reported posts and update the posts state
-        const savedPosts = JSON.parse(localStorage.getItem('savedPosts')) || {};
-        const reportedPosts = JSON.parse(localStorage.getItem('reportedPosts')) || {};
+        const token = localStorage.getItem('token');
+        if (!token) return setPosts(redditPosts);
 
-        const updatedPosts = extracted.map((post) => ({
+        const [savedRes, reportedRes] = await Promise.all([
+          axios.get('https://creatordashboardbackend-7px3.onrender.com/api/user/saved-posts', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get('https://creatordashboardbackend-7px3.onrender.com/api/user/reports', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        const savedPostIds = savedRes.data.map((p) => p.postId);
+        const reportedPostIds = reportedRes.data.map((p) => p.postId);
+
+        const mergedPosts = redditPosts.map((post) => ({
           ...post,
-          saved: savedPosts[post.id] || false,
-          reported: reportedPosts[post.id] || false,
+          saved: savedPostIds.includes(post.id),
+          reported: reportedPostIds.includes(post.id),
         }));
 
-        setPosts(updatedPosts);
-      })
-      .catch((err) => {
-        console.error('Reddit API Error:', err);
-        setMessage('Error fetching posts. Please try again later.');
-      });
+        setPosts(mergedPosts);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  // Handle saving a post
   const handleSave = async (post) => {
     if (post.saved) {
       setToastMessage('Post already saved!');
@@ -51,7 +63,7 @@ const Feed = () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        setMessage('No token found. Please login again.');
+        setToastMessage('Please login first!');
         return;
       }
 
@@ -62,80 +74,66 @@ const Feed = () => {
           content: post.title,
         },
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      // Update the saved status and store it in localStorage
-      const updatedPosts = posts.map((p) =>
-        p.id === post.id ? { ...p, saved: true } : p
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, saved: true } : p))
       );
-      setPosts(updatedPosts);
-      localStorage.setItem('savedPosts', JSON.stringify(updatedPosts.reduce((acc, p) => {
-        acc[p.id] = p.saved;
-        return acc;
-      }, {})));
-
       setToastMessage('Post saved successfully!');
     } catch (err) {
       console.error(err);
-      setMessage('Error saving post. Please try again.');
+      setToastMessage('Error saving post.');
     }
   };
 
-  // Handle reporting a post
   const handleReport = (postId) => {
-    if (posts.find(post => post.id === postId).reported) {
+    const isAlreadyReported = posts.find((p) => p.id === postId)?.reported;
+    if (isAlreadyReported) {
       setToastMessage('Post already reported!');
       return;
     }
 
     setSelectedPostId(postId);
-    setShowModal(true);
     setReportReason('');
+    setShowModal(true);
   };
 
-  // Submit the report
   const submitReport = async () => {
-    if (!reportReason) {
-      alert('Please provide a reason for reporting.');
+    if (!reportReason.trim()) {
+      setToastMessage('Please provide a reason.');
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        setMessage('No token found. Please login again.');
+        setToastMessage('Please login first!');
         return;
       }
 
       await axios.post(
         'https://creatordashboardbackend-7px3.onrender.com/api/user/report-post',
-        { postId: selectedPostId, reason: reportReason },
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          postId: selectedPostId,
+          reason: reportReason,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      // Update the reported status and store it in localStorage
-      const updatedPosts = posts.map((p) =>
-        p.id === selectedPostId ? { ...p, reported: true } : p
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === selectedPostId ? { ...p, reported: true } : p
+        )
       );
-      setPosts(updatedPosts);
-      localStorage.setItem('reportedPosts', JSON.stringify(updatedPosts.reduce((acc, p) => {
-        acc[p.id] = p.reported;
-        return acc;
-      }, {})));
-
       setToastMessage('Post reported successfully!');
       setShowModal(false);
     } catch (err) {
       console.error(err);
-      setMessage('Error reporting post. Please try again.');
+      setToastMessage('Error reporting post.');
     }
   };
 
@@ -146,15 +144,6 @@ const Feed = () => {
           Reddit Feed
         </h2>
 
-        {message && (
-          <div
-            className={`mb-6 px-4 py-2 rounded text-white font-medium ${message.includes('Error') ? 'bg-red-500' : 'bg-green-500'}`}
-          >
-            {message}
-          </div>
-        )}
-
-        {/* Posts Grid */}
         <div className="grid md:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-6">
           {posts.map((post) => (
             <div
@@ -162,7 +151,9 @@ const Feed = () => {
               className="bg-white rounded-xl p-5 border border-gray-100 flex flex-col justify-between transition duration-300 hover:shadow-[0_4px_20px_rgba(168,85,247,0.3)]"
             >
               <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-800 mb-4 line-clamp-3">{post.title}</h3>
+                <h3 className="text-base font-semibold text-gray-800 mb-4 line-clamp-3">
+                  {post.title}
+                </h3>
                 <a
                   href={`https://reddit.com${post.permalink}`}
                   target="_blank"
@@ -176,14 +167,22 @@ const Feed = () => {
               <div className="mt-6 flex">
                 <button
                   onClick={() => handleSave(post)}
-                  className={`w-1/2 text-white text-sm font-medium py-2 rounded-l-md transition ${post.saved ? 'bg-gray-400' : 'bg-purple-500 hover:bg-purple-600'}`}
+                  className={`w-1/2 text-white text-sm font-medium py-2 rounded-l-md transition ${
+                    post.saved
+                      ? 'bg-gray-400'
+                      : 'bg-purple-500 hover:bg-purple-600'
+                  }`}
                   disabled={post.saved}
                 >
                   {post.saved ? 'Saved' : 'Save'}
                 </button>
                 <button
                   onClick={() => handleReport(post.id)}
-                  className={`w-1/2 text-white text-sm font-medium py-2 rounded-r-md transition ${post.reported ? 'bg-gray-400' : 'bg-red-500 hover:bg-red-600'}`}
+                  className={`w-1/2 text-white text-sm font-medium py-2 rounded-r-md transition ${
+                    post.reported
+                      ? 'bg-gray-400'
+                      : 'bg-red-500 hover:bg-red-600'
+                  }`}
                   disabled={post.reported}
                 >
                   {post.reported ? 'Reported' : 'Report'}
@@ -193,7 +192,7 @@ const Feed = () => {
           ))}
         </div>
 
-        {/* Toast Notification */}
+        {/* Toast */}
         {toastMessage && (
           <div
             className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white py-2 px-6 rounded-lg shadow-lg"
