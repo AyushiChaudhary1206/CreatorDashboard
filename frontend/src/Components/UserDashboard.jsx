@@ -19,7 +19,7 @@ const UserDashboard = () => {
 
     const fetchDashboard = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/user/dashboard", {
+        const res = await axios.get("https://creatordashboardbackend-7px3.onrender.com/api/user/dashboard", {
           headers: { Authorization: `Bearer ${token}` }
         });
         setCredits(res.data.credits);
