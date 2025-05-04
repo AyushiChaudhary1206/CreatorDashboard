@@ -18,10 +18,10 @@ const AdminDashboard = () => {
     setLoading(true);
     setError(null);
     try {
-      const resUsers = await axios.get("http://localhost:5000/api/user/users", {
+      const resUsers = await axios.get("https://creatordashboardbackend-7px3.onrender.com/api/user/users", {
         headers: { authorization: `Bearer ${token}` },
       });
-      const resReports = await axios.get("http://localhost:5000/api/user/reports", {
+      const resReports = await axios.get("https://creatordashboardbackend-7px3.onrender.com/api/user/reports", {
         headers: { authorization: `Bearer ${token}` },
       });
       console.log(resReports);
@@ -39,7 +39,7 @@ const AdminDashboard = () => {
     if (!newCredits) return;
     try {
       await axios.put(
-        `http://localhost:5000/api/user/update-credits/${userId}`,
+        `https://creatordashboardbackend-7px3.onrender.com/api/user/update-credits/${userId}`,
         { credits: newCredits },
         { headers: { Authorization: `Bearer ${token}` } }
       );
